@@ -1,0 +1,7 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+pysweph>=2.10.3.6
+numpy>=2.0
+pandas>=2.2
+scipy>=1.11

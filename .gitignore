@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+backend/ephe/*.se1
+backend/data/*.sqlite3
+backend/data/*.sqlite3-shm
+backend/data/*.sqlite3-wal
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
