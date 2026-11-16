@@ -36,6 +36,7 @@ const PAIRS = [
   "Venus|Jupiter", "Venus|Saturn", "Mars|Jupiter", "Mars|Saturn", "Jupiter|Saturn",
 ];
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const CALENDAR_WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const YEARS = Array.from({ length: 15 }, (_, index) => 2026 + index);
 const DEFAULT_COLORS = Object.fromEntries(ASPECTS.map((aspect) => [aspect.name, aspect.color]));
 
@@ -119,9 +120,7 @@ function monthName(year: number, month: number) {
   return new Intl.DateTimeFormat("en", { month: "long", year: "numeric" }).format(new Date(year, month, 1));
 }
 
-function MonthGrid({
-  year, month, events, colors, onSelect,
-}: {
+function MonthGrid({ year, month, events, colors, onSelect }: {
   year: number;
   month: number;
   events: AstroEvent[];
@@ -130,46 +129,74 @@ function MonthGrid({
 }) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const startOffset = (new Date(year, month, 1).getDay() + 6) % 7;
-  const cells = Array.from({ length: startOffset + daysInMonth }, (_, index) =>
-    index < startOffset ? null : index - startOffset + 1,
-  );
+  const cells = Array.from({ length: startOffset + daysInMonth }, (_, index) => index < startOffset ? null : index - startOffset + 1);
+  return <Card className="month-card" bordered={false}>
+    <h3>{monthName(year, month)}</h3>
+    <div className="month-grid">{WEEKDAYS.map((day) => <span key={day} className="weekday">{day}</span>)}
+      {cells.map((day, index) => {
+        if (day === null) return <span className="day-blank" key={`blank-${index}`} />;
+        const dayKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        const dayEvents = events.filter((event) => localDate(event.exact_time_local) === dayKey);
+        return <Tooltip key={dayKey} title={dayEvents.length ? `${dayEvents.length} planetary event${dayEvents.length === 1 ? "" : "s"}` : undefined}>
+          <button type="button" className={`day-cell ${dayEvents.length ? "has-events" : ""}`} onClick={() => onSelect(dayKey)} aria-label={`${dayKey}${dayEvents.length ? `, ${dayEvents.length} events` : ""}`}>
+            <span>{day}</span>{dayEvents.length > 0 && <span className="event-dots" aria-hidden="true">{dayEvents.slice(0, 4).map((event) => <i key={event.id} style={{ background: colors[event.aspect_name] ?? "#697586" }} />)}{dayEvents.length > 4 && <small>+{dayEvents.length - 4}</small>}</span>}
+          </button>
+        </Tooltip>;
+      })}
+    </div>
+  </Card>;
+}
+
+function FullCalendarGrid({
+  date, view, events, colors, onSelect,
+}: {
+  date: Date;
+  view: "month" | "week" | "list";
+  events: AstroEvent[];
+  colors: Record<string, string>;
+  onSelect: (day: string) => void;
+}) {
+  const month = date.getMonth();
+  const year = date.getFullYear();
+  const firstDay = new Date(year, month, 1);
+  const gridStart = new Date(year, month, 1 - firstDay.getDay());
+  const weekStart = new Date(date.getFullYear(), date.getMonth(), date.getDate() - date.getDay());
+  const now = new Date();
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const days = view === "week" ? 7 : 42;
+  const cells = Array.from({ length: days }, (_, index) => new Date(
+    view === "week" ? weekStart.getFullYear() : gridStart.getFullYear(),
+    view === "week" ? weekStart.getMonth() : gridStart.getMonth(),
+    (view === "week" ? weekStart.getDate() : gridStart.getDate()) + index,
+  ));
+  const listEvents = events.filter((event) => localDate(event.exact_time_local).startsWith(`${year}-${String(month + 1).padStart(2, "0")}`));
   return (
-    <Card className="month-card" bordered={false}>
-      <h3>{monthName(year, month)}</h3>
-      <div className="month-grid">
-        {WEEKDAYS.map((day) => <span key={day} className="weekday">{day}</span>)}
-        {cells.map((day, index) => {
-          if (day === null) return <span className="day-blank" key={`blank-${index}`} />;
-          const dayKey = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    <div className={`full-calendar-grid ${view === "week" ? "calendar-week-view" : ""}`}>
+      {view !== "list" && <>
+        <div className="full-calendar-weekdays">{CALENDAR_WEEKDAYS.map((day) => <div key={day}>{day}</div>)}</div>
+        <div className="full-calendar-days">{cells.map((day) => {
+          const dayKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
           const dayEvents = events.filter((event) => localDate(event.exact_time_local) === dayKey);
-          return (
-            <Tooltip key={dayKey} title={dayEvents.length ? `${dayEvents.length} planetary event${dayEvents.length === 1 ? "" : "s"}` : undefined}>
-              <button
-                type="button"
-                className={`day-cell ${dayEvents.length ? "has-events" : ""}`}
-                onClick={() => onSelect(dayKey)}
-                aria-label={`${dayKey}${dayEvents.length ? `, ${dayEvents.length} events` : ""}`}
-              >
-                <span>{day}</span>
-                {dayEvents.length > 0 && (
-                  <span className="event-dots" aria-hidden="true">
-                    {dayEvents.slice(0, 4).map((event) => (
-                      <i key={event.id} style={{ background: colors[event.aspect_name] ?? "#697586" }} />
-                    ))}
-                    {dayEvents.length > 4 && <small>+{dayEvents.length - 4}</small>}
-                  </span>
-                )}
+          const shown = view === "week" ? dayEvents : dayEvents.slice(0, 3);
+          return <div key={dayKey} className={`full-calendar-day ${view === "month" && day.getMonth() !== month ? "calendar-outside" : ""}`}>
+            <button className={`calendar-day-number ${dayKey === todayKey ? "calendar-today" : ""}`} onClick={() => onSelect(dayKey)}>{day.getDate()}</button>
+            <div className="calendar-day-events">{shown.map((event) => <Tooltip key={event.id} title={`${event.aspect_name} · ${event.aspect_angle_degrees}°`}>
+              <button className="calendar-event-chip" onClick={() => onSelect(dayKey)} style={{ "--event-color": colors[event.aspect_name] ?? "#697586" } as React.CSSProperties}>
+                <i />{clockTime(event.exact_time_local)} {event.planet_1} × {event.planet_2}
               </button>
-            </Tooltip>
-          );
-        })}
-      </div>
-    </Card>
+            </Tooltip>)}{dayEvents.length > shown.length && <button className="calendar-more-events" onClick={() => onSelect(dayKey)}>+{dayEvents.length - shown.length} more</button>}</div>
+          </div>;
+        })}</div>
+      </>}
+      {view === "list" && <div className="calendar-list-view">{listEvents.map((event) => <button key={event.id} className="calendar-list-event" onClick={() => onSelect(localDate(event.exact_time_local))}><span>{longDate(event.exact_time_local)}</span><i style={{ background: colors[event.aspect_name] ?? "#697586" }} /><strong>{event.planet_1} × {event.planet_2}</strong><span>{event.aspect_name} · {event.aspect_angle_degrees}°</span><time>{clockTime(event.exact_time_local)} IST</time></button>)}</div>}
+    </div>
   );
 }
 
 export default function Workspace({ view }: { view: "dashboard" | "calendar" | "calculator" }) {
   const [year, setYear] = useState(2026);
+  const [calendarDate, setCalendarDate] = useState(() => new Date(2026, new Date().getMonth(), 1));
+  const [calendarView, setCalendarView] = useState<"month" | "week" | "list">("month");
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [events, setEvents] = useState<AstroEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -286,26 +313,26 @@ export default function Workspace({ view }: { view: "dashboard" | "calendar" | "
           <div><div className="crumb">RESEARCH <span>/</span> {isDashboard ? "OVERVIEW" : "YEARLY CALENDAR"}</div><h1>{isDashboard ? "Dashboard" : "Astro Calendar"}</h1></div>
           <div className="top-actions">
             <span className="timezone-chip">◷ &nbsp; Asia / Kolkata</span>
-            <Select aria-label="Calendar year" value={year} options={YEARS.map((value) => ({ value, label: String(value) }))} onChange={setYear} />
+            <Select aria-label="Calendar year" value={year} options={YEARS.map((value) => ({ value, label: String(value) }))} onChange={(value) => { setYear(value); setCalendarDate((current) => new Date(value, current.getMonth(), current.getDate())); }} />
             <Button type="primary" onClick={startCalculation} loading={starting || run?.status === "running"}>Calculate year</Button>
           </div>
         </header>
 
         {apiError && <Alert className="api-alert" type="error" showIcon message="Local API unavailable" description={`${apiError}. Start the FastAPI service to load and calculate events.`} />}
 
-        <section className="intro-row">
+        {isDashboard && <section className="intro-row">
           <div><div className="eyebrow">ASTRONOMY RESEARCH · {year}</div><h2>{isDashboard ? "Year at a glance" : "Planetary aspect calendar"}</h2><p>Planetary events are calculated independently; trader interpretations and market outcomes remain separate.</p></div>
           <div className={`run-pill ${run?.status ?? "empty"}`}><span className="status-dot" />{runStatus}{run?.status === "completed" && <span className="run-count">{run.event_count.toLocaleString()} events</span>}</div>
-        </section>
+        </section>}
 
-        <section className="stats-grid">
+        {isDashboard && <section className="stats-grid">
           <Card className="stat-card" bordered={false}><div className="stat-label">PLANETARY EVENTS</div>{loading ? <Skeleton active paragraph={false} /> : <Statistic value={dashboard?.total_events ?? 0} valueStyle={{ fontSize: 28, fontWeight: 650 }} />}<div className="stat-foot">Exact aspect formations</div></Card>
           <Card className="stat-card" bordered={false}><div className="stat-label">IMPORTANT DATES</div>{loading ? <Skeleton active paragraph={false} /> : <Statistic value={dashboard?.important_dates ?? 0} valueStyle={{ fontSize: 28, fontWeight: 650 }} />}<div className="stat-foot">Days with one or more aspects</div></Card>
           <Card className="stat-card" bordered={false}><div className="stat-label">MOON-RELATED</div>{loading ? <Skeleton active paragraph={false} /> : <Statistic value={dashboard?.moon_events ?? 0} valueStyle={{ fontSize: 28, fontWeight: 650 }} />}<div className="stat-foot">Events involving the Moon</div></Card>
           <Card className="stat-card status-stat" bordered={false}><div className="stat-label">CALCULATION STATUS</div><div className="status-value"><Badge status={run?.status === "completed" ? "success" : run?.status === "running" ? "processing" : run?.status === "failed" ? "error" : "default"} />{runStatus}</div><div className="stat-foot">Swiss Ephemeris · Tropical</div></Card>
-        </section>
+        </section>}
 
-        <section className="section-heading">
+        {isDashboard ? <section className="section-heading">
           <div><div className="eyebrow">{isDashboard ? "CALENDAR OVERVIEW" : "JANUARY — DECEMBER"}</div><h2>{isDashboard ? "Event calendar" : "Planetary aspect calendar"}</h2></div>
           <Space wrap>
             <Select allowClear placeholder="All planets" value={planetFilter} onChange={setPlanetFilter} options={["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"].map((p) => ({ value: p, label: p }))} />
@@ -313,7 +340,21 @@ export default function Workspace({ view }: { view: "dashboard" | "calendar" | "
             <Select allowClear placeholder="All aspects" value={aspectFilter} onChange={setAspectFilter} options={ASPECTS.map((a) => ({ value: a.name, label: `${a.name} · ${a.angle}°` }))} />
             <Button onClick={() => setPaletteOpen(true)}>Marker colors</Button>
           </Space>
-        </section>
+        </section> : <section className="full-calendar-toolbar">
+          <div className="full-calendar-period-controls">
+            <Button onClick={() => { const now = new Date(); setYear(now.getFullYear()); setCalendarDate(new Date(now.getFullYear(), now.getMonth(), now.getDate())); }}>Today</Button>
+            <Button aria-label="Previous period" onClick={() => setCalendarDate((current) => calendarView === "month" ? new Date(current.getFullYear(), current.getMonth() - 1, 1) : new Date(current.getFullYear(), current.getMonth(), current.getDate() - 7))}>‹</Button>
+            <Button aria-label="Next period" onClick={() => setCalendarDate((current) => calendarView === "month" ? new Date(current.getFullYear(), current.getMonth() + 1, 1) : new Date(current.getFullYear(), current.getMonth(), current.getDate() + 7))}>›</Button>
+            <h2>{monthName(calendarDate.getFullYear(), calendarDate.getMonth())}</h2>
+          </div>
+          <div className="full-calendar-view-controls">{(["week", "month", "list"] as const).map((item) => <Button key={item} type={calendarView === item ? "primary" : "text"} onClick={() => setCalendarView(item)}>{item[0].toUpperCase() + item.slice(1)}</Button>)}</div>
+          <Space wrap className="full-calendar-filters">
+            <Select allowClear placeholder="All planets" value={planetFilter} onChange={setPlanetFilter} options={["Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn"].map((planet) => ({ value: planet, label: planet }))} />
+            <Select allowClear placeholder="All planetary pairs" value={pairFilter} onChange={setPairFilter} options={PAIRS.map((pair) => ({ value: pair, label: pair.replace("|", " × ") }))} />
+            <Select allowClear placeholder="All aspects" value={aspectFilter} onChange={setAspectFilter} options={ASPECTS.map((aspect) => ({ value: aspect.name, label: `${aspect.name} · ${aspect.angle}°` }))} />
+            <Button onClick={() => setPaletteOpen(true)}>Marker colors</Button>
+          </Space>
+        </section>}
 
         <div className="aspect-legend">
           {ASPECTS.map((aspect) => <span key={aspect.name}><i style={{ background: colors[aspect.name] }} />{aspect.name}<small>{aspect.angle}°</small></span>)}
@@ -327,12 +368,12 @@ export default function Workspace({ view }: { view: "dashboard" | "calendar" | "
             <Button type="primary" onClick={startCalculation} loading={starting || run?.status === "running"}>{run?.status === "completed" ? "Recalculate year" : "Calculate planetary events"}</Button>
           </Card>
         ) : (
-          <div className="months-grid">
+          isDashboard ? <div className="months-grid">
             {Array.from({ length: 12 }, (_, month) => <MonthGrid key={`${year}-${month}`} year={year} month={month} events={filteredEvents} colors={colors} onSelect={setSelectedDate} />)}
-          </div>
+          </div> : <FullCalendarGrid date={calendarDate} view={calendarView} events={filteredEvents} colors={colors} onSelect={setSelectedDate} />
         )}
 
-        <section className="bottom-grid">
+        {isDashboard && <section className="bottom-grid">
           <Card className="bottom-card" bordered={false}>
             <div className="bottom-title"><div><div className="eyebrow">NEXT FORMATIONS</div><h3>Upcoming aspects</h3></div><span className="subtle-count">{dashboard?.upcoming_events.length ?? 0} listed</span></div>
             {!dashboard?.upcoming_events.length ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Upcoming events appear after calculation" /> : dashboard.upcoming_events.slice(0, 5).map((event) => (
@@ -354,9 +395,9 @@ export default function Workspace({ view }: { view: "dashboard" | "calendar" | "
               </div>
             ))}
           </Card>
-        </section>
+        </section>}
 
-        <footer className="page-footer"><span>ASTRO MARKET ANALYZER</span><span>Research hypotheses only · No predictive claims</span><span>Swiss Ephemeris · {year}</span></footer>
+        {isDashboard && <footer className="page-footer"><span>ASTRO MARKET ANALYZER</span><span>Research hypotheses only · No predictive claims</span><span>Swiss Ephemeris · {year}</span></footer>}
       </main>
 
       <Modal open={Boolean(selectedDate)} title={selectedDate ? new Intl.DateTimeFormat("en", { dateStyle: "full", timeZone: "UTC" }).format(new Date(`${selectedDate}T12:00:00Z`)) : "Date details"} onCancel={() => setSelectedDate(null)} footer={<Button onClick={() => setSelectedDate(null)}>Close</Button>} width={620}>
