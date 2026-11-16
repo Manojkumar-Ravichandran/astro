@@ -7,5 +7,7 @@ backend/data/*.sqlite3-shm
 backend/data/*.sqlite3-wal
 frontend/node_modules/
 frontend/.next/
+frontend/.next-dev/
+frontend/.next-calendar-dev/
 frontend/out/
 frontend/.env.local

@@ -1,5 +1,5 @@
-import Workspace from "../workspace";
+import CalendarClient from "./calendar-client";
 
 export default function CalendarPage() {
-  return <Workspace view="calendar" />;
+  return <CalendarClient />;
 }
